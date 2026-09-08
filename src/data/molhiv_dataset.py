@@ -116,8 +116,8 @@ class MolHIVDataset(Dataset):
         hiv_dir = ensure_molhiv(root)
         smiles, labels = load_molhiv_split(hiv_dir, split)
 
-        data_list, raw_descs, kept_smiles, skipped = [], [], [], 0
-        for smi, lab in zip(smiles, labels):
+        data_list, raw_descs, kept_smiles, kept_idx, skipped = [], [], [], [], 0
+        for orig_i, (smi, lab) in enumerate(zip(smiles, labels)):
             if self._cache is not None:
                 data, desc = self._cache.get(smi)
             else:
@@ -132,6 +132,7 @@ class MolHIVDataset(Dataset):
             data.y = torch.tensor([[float(lab)]], dtype=torch.float)
             raw_descs.append(desc)
             kept_smiles.append(smi)
+            kept_idx.append(orig_i)
             data_list.append(data)
         if self._cache is not None:
             self._cache.save()
@@ -146,6 +147,13 @@ class MolHIVDataset(Dataset):
         # fingerprint block computed from these rows lines up with the embeddings —
         # ``load_molhiv_split`` order is NOT safe when anything was skipped).
         self.smiles = kept_smiles
+        # Positions of the kept molecules in the ORIGINAL OGB split order, so a
+        # prediction vector can be scattered back to the full official split. An OGB
+        # leaderboard submission must score every row of valid/test, and this dataset
+        # silently drops the ones our graph featurizer rejects - see
+        # scripts/ogb_submission_molhiv.py, which uses this to refill them.
+        self.kept_idx = np.asarray(kept_idx, dtype=np.int64)
+        self.n_original = len(smiles)
 
         # Normalize descriptors (train stats shared to valid/test).
         raw = torch.tensor(np.nan_to_num(np.asarray(raw_descs, dtype=np.float32), nan=0.0),

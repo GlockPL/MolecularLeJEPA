@@ -217,6 +217,42 @@ rebuilt without running anything.
 
 ---
 
+## OGB leaderboard submission
+
+The sweep above selects a configuration; `scripts/ogb_submission_molhiv.py` runs that
+one configuration under the OGB leaderboard's rules and prints the exact values the
+submission form asks for.
+
+```bash
+uv run python scripts/ogb_submission_molhiv.py          # writes logs/ogb_submission_molhiv.json
+uv add ogb                                              # optional, see below
+```
+
+It differs from the sweep in three ways that matter for a valid submission.
+
+**It scores the full official split.** `MolHIVDataset` drops molecules our graph
+featurizer rejects - test rows 29 and 302, both inactive, both hypervalent Al/B
+complexes - so the sweep reports on 4111 of 4113 rows. A leaderboard number has to
+cover every row. Predictions are scattered back through `dataset.kept_idx` and the
+rejected rows get a constant (the training positive rate). The script prints the
+subset and full-split numbers side by side; for a rank-based metric with two inactive
+molecules restored the difference is ~0.
+
+**It reports the unbiased standard deviation.** OGB asks for `torch.std` (ddof=1);
+the sweep uses `np.std` (ddof=0). Both are printed.
+
+**It uses the official Evaluator when available.** `ogb` is not a dependency of this
+project. For ogbg-molhiv the Evaluator reduces to `roc_auc_score` over the full split
+(one task, no missing labels), so the fallback is exact - and when `ogb` *is*
+installed the script computes both and asserts they agree. Install it if you want the
+official code path to be the one that produced your number.
+
+Two things to get right on the form: report the **per-model mean over seeds 0-9**, not
+the ensemble (averaging the seeds collapses the ten required runs into one model), and
+**declare external data** - the backbone is pretrained on ~2.9M ChEMBL molecules.
+
+---
+
 ## How to read the result
 
 Three things have to be said together, or the finding is overstated.
