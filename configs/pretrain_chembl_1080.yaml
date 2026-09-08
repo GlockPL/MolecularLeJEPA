@@ -1,0 +1,79 @@
+# Pretraining config — ChEMBL corpus, descriptor-augmented LeJEPA.
+# TARGET: HPC node with 4x NVIDIA GTX 1080 (Pascal, sm_61, 8 GB each).
+#
+# Same backbone + LeJEPA setup as pretrain_chembl.yaml. Only the bits that the
+# old Pascal cards + 4-GPU DDP need are different:
+#
+#   * compile: false   -> torch.compile's inductor backend uses Triton, which
+#                         requires sm_70+ (Volta). On a GTX 1080 it errors out /
+#                         silently falls back. Eager mode is the only safe option.
+#   * batch_size: 256  -> 8 GB per card vs the 24 GB RTX 3090. With DDP across
+#                         4 GPUs the EFFECTIVE global batch is 256*4 = 1024, i.e.
+#                         identical to the single-GPU chembl run, so lr is unchanged.
+#   * use_checkpoint   -> kept on; gradient checkpointing buys headroom on 8 GB.
+#
+# Environment (one-time, on the HPC node — installs the cu118 / Pascal torch):
+#   uv sync          # re-resolves torch from the cu118 index pinned in pyproject
+#   # sanity: should print True and "NVIDIA GeForce GTX 1080"
+#   uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+#
+# Get the featurized cache onto the node first (run from your dev box):
+#   bash scripts/upload_cache.sh user@hpc-host:/path/to/AntibioticJEPA
+#
+# Launch (4-GPU DDP via torchrun):
+#   torchrun --nproc_per_node=4 main.py pretrain --config configs/pretrain_chembl_1080.yaml
+#
+# Resume:
+#   torchrun --nproc_per_node=4 main.py pretrain \
+#       --config configs/pretrain_chembl_1080.yaml --resume auto
+
+project: "antibioticjepa-chembl-1080"
+wandb: false
+profile: false
+compile: false                 # Pascal (sm_61) has no Triton support — MUST be false
+checkpoint_dir: "checkpoints/pretrain_chembl_1080"
+
+data:
+  zinc20_dir: "data/chembl"
+  cache_dir: "data/chembl_cache_desc"
+  cache_in_memory: true        # ~2.9M mols -> ~3 GB; shared copy-on-write across ranks/workers
+  max_atoms: 100               # must match --max-atoms used at featurize time
+  max_mols: null
+  shuffle_buffer: 50000        # per-replica reservoir; smaller than 1-GPU runs to bound
+                               # RAM (world_size*num_workers replicas each hold a buffer)
+
+model:
+  hidden_dim: 128
+  embed_dim: 128               # must be <= hidden_dim
+  num_layers: 6
+  num_heads: 4
+  walk_length: 20
+  dropout: 0.1
+  use_checkpoint: true
+  n_descriptors: 217           # concat normalized RDKit descriptors before proj_head
+                               # GLOBAL VIEWS ONLY — local views get zero descriptor
+
+jepa:
+  lambd: 0.2
+  Vg: 2
+  Vl: 8
+  num_slices: 1024
+  chunk_size: 1
+
+training:
+  batch_size: 256              # PER GPU. Effective global batch = 256 * 4 GPUs = 1024.
+  lr: 3.0e-4                   # unchanged: global batch matches the 1-GPU chembl run
+  weight_decay: 1.0e-2
+  epochs: 40
+  warmup_epochs: 0
+  # steps_per_epoch is now also a HARD per-epoch cap (see pretrain.py) so all 4
+  # ranks stay in lockstep. It MUST be <= per-rank budget:
+  #   per_rank_budget = total_molecules / world_size / batch_size
+  #                   ~= 2.9M / 4 / 256  ~= 2830
+  # 2700 leaves margin so no rank exhausts its stream and deadlocks the all-reduce.
+  # Recompute if the cache size or GPU count changes.
+  steps_per_epoch: 2700
+  num_workers: 6               # PER rank -> 4*6 = 24 loader processes; tune to node cores
+  prefetch_factor: 4
+  log_every: 100
+  save_every: 2000

@@ -1,0 +1,2 @@
+Task,Mean prc-auc,Standard deviation prc-auc,Fold 0 prc-auc,Mean auc,Standard deviation auc,Fold 0 auc
+antibiotic,0.2979933040074432,0.0,0.2979933040074432,0.9334695094375852,0.0,0.9334695094375852

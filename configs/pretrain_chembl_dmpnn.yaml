@@ -1,0 +1,90 @@
+# LeJEPA pretraining of the Chemprop-style D-MPNN on ChEMBL — the thesis test on a
+# strong graph backbone. Same LeJEPA setup / ChEMBL cache as pretrain_chembl.yaml;
+# only the backbone changes (GPS -> native PyG D-MPNN, src/models/dmpnn.py).
+#
+# WHY: our supervised D-MPNN matches Chemprop on antibiotic (scratch ~0.32). The
+# open question — does LeJEPA pretraining beat a random init on a strong encoder —
+# is the actual hypothesis. Pretrain here, then finetune and compare to the scratch
+# baseline at the SAME architecture.
+#
+# use_proj_head MUST be true here: SIGReg operates on the proj_head's embed_dim
+# output and descriptors concat there (global views only) — exactly the GPS path.
+#
+# ---- SCALE / MEMORY (read before launching on 8GB 1080s) ----
+# The supervised "matches Chemprop" model was hidden 1600 / depth 5 (~11M params).
+# A hidden-1600 D-MPNN encoding Vg+Vl=10 views/molecule will NOT fit at large batch
+# on a 1080 and a full ChEMBL pretrain would take weeks. This config defaults to a
+# PRACTICAL scale (hidden 512 / depth 5) that runs in a GPS-like timeframe and still
+# tests the hypothesis. Trade-offs:
+#   * hidden 512  -> needs its OWN scratch baseline at hidden 512 (a ~15-min finetune
+#                    run with --config finetune_dmpnn_scaffold.yaml + hidden_dim 512).
+#   * hidden 1600 -> directly comparable to the existing 0.32 scratch baseline, but
+#                    expect a multi-week pretrain; drop batch_size hard (~32-64).
+# batch_size is the OOM knob; steps_per_epoch is a length hint — recompute as
+# ~cache_mols / (batch_size * num_gpus) if you change batch.
+#
+# Build the cache (shared with the GPS ChEMBL run — already exists):
+#   data/chembl_cache_desc  (atom/bond = OUR featurize.py scheme, 164/14)
+#
+# Pretrain (4x GTX1080):
+#   torchrun --nproc_per_node=4 main.py pretrain --config configs/pretrain_chembl_dmpnn.yaml
+#   # resume: ... --resume auto
+#
+# Then finetune + compare (same arch, use_proj_head=true):
+#   uv run python main.py finetune --config configs/finetune_dmpnn_scaffold.yaml \
+#       --checkpoint checkpoints/pretrain_chembl_dmpnn/epoch_00XX.pt --task antibiotic
+#   vs the scratch run (no --checkpoint) at the SAME hidden_dim.
+
+project: "antibioticjepa-chembl-dmpnn"
+wandb: false
+profile: false
+compile: false                 # D-MPNN scatter ops + Pascal: keep compile off (cu118/1080)
+checkpoint_dir: "checkpoints/pretrain_chembl_dmpnn"
+
+data:
+  zinc20_dir: "data/chembl"
+  cache_dir: "data/chembl_cache_desc"   # same cache as the GPS ChEMBL run (our featurizer)
+  cache_in_memory: true
+  max_atoms: 100
+  max_mols: null
+  shuffle_buffer: 100000
+
+model:
+  backbone: dmpnn
+  use_proj_head: true          # REQUIRED for pretraining (SIGReg target + global-view descriptors)
+  hidden_dim: 512              # practical scale for 1080; bump to 1600 to match the 0.32 baseline
+  embed_dim: 512               # must be <= hidden_dim
+  num_layers: 5                # D-MPNN message-passing depth (Chemprop depth=5)
+  dropout: 0.0
+  n_descriptors: 217           # concat normalized RDKit descriptors before proj_head
+                               # GLOBAL VIEWS ONLY — local views get zero descriptor
+  # atom_dim/bond_dim default to our featurize.py dims (164/14) — matches the cache.
+
+jepa:
+  lambd: 0.2
+  Vg: 2
+  Vl: 8
+  num_slices: 1024
+  chunk_size: 1
+  # Phase-7 SSL-difficulty knob: fraction of atoms each local (BFS) view covers.
+  # Lower = local views hold out MORE of the molecule → harder part→whole task →
+  # higher pred_local (logged as pred_l). Sweep 0.6 → 0.4 → 0.25 and re-finetune;
+  # if pred_l rises AND downstream improves, view-easiness was a bottleneck.
+  cover_frac: 0.6
+  # Phase-7 knob: how many of the Vg global views carry descriptors (rest get
+  # zeros). Unset/null = all Vg (legacy). Set to 1 so the OTHER global view is
+  # descriptor-free → the global-view prediction is non-trivial (with all-global
+  # descriptors both global views are identical → pred_global ≈ 0, i.e. wasted).
+  desc_global_views: null
+
+training:
+  batch_size: 256              # OOM knob on 8GB 1080 (GPS used 1024 at hidden 128); lower if OOM
+  lr: 3.0e-4
+  weight_decay: 1.0e-2
+  epochs: 40
+  warmup_epochs: 0
+  steps_per_epoch: 2802        # length hint; recompute ~cache_mols/(batch_size*num_gpus) if batch changes
+  num_workers: 12
+  prefetch_factor: 4
+  log_every: 100
+  save_every: 2000

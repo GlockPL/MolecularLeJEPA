@@ -1,0 +1,52 @@
+# Finetune config for ogbg-molhiv (Phase 11 benchmark).
+#
+# Benchmark rules: canonical scaffold split (train/valid/test), single binary
+# task HIV_active (~3.5% pos), metric ROC-AUC, select on VALID + report TEST.
+# Run scratch-vs-pretrained over several seeds and report mean±std (the SSL
+# molhiv literature uses ~10 seeds). Compare to the GNN-SSL band (~0.75-0.79),
+# NOT the fingerprint-ensemble leaderboard #1 (Multi-RF-Fusion 0.85).
+#
+#   # pretrained (LeJEPA backbone):
+#   uv run python scripts/finetune_molhiv.py --config configs/finetune_molhiv.yaml \
+#       --checkpoint checkpoints/pretrain_chembl/final.pt --seeds 0,1,2,3,4
+#   # scratch control (no --checkpoint) — isolates the pretraining lift:
+#   uv run python scripts/finetune_molhiv.py --config configs/finetune_molhiv.yaml \
+#       --seeds 0,1,2,3,4
+#
+# Backbone MUST match pretrain_desc.yaml (GPS 128-dim/6-layer, n_descriptors=217)
+# so the pretrained proj_head loads. Descriptors are concatenated for BOTH scratch
+# and pretrained, so they don't confound the scratch-vs-pretrained delta.
+
+project: "antibioticjepa-finetune-molhiv"
+wandb: false
+checkpoint_dir: "checkpoints/finetune_molhiv"
+
+data:
+  root: "data/ogbg_molhiv"       # auto-downloaded
+  featurizer: ours               # 164-dim atom feats (matches the pretrained backbone)
+
+model:
+  backbone: gps
+  hidden_dim: 128
+  embed_dim: 128
+  num_layers: 6
+  num_heads: 4
+  walk_length: 20
+  dropout: 0.1
+  n_descriptors: 217             # required to load the pretrained proj_head
+  head_hidden_dim: 256
+  head_num_layers: 1
+
+training:
+  batch_size: 64
+  lr: 1.0e-3                     # DEFAULT only — OGB prescribes no lr. Sweep via --lr
+                                 # (e.g. 1e-3/5e-4/1e-4/5e-5), select by VALIDATION ROC-AUC,
+                                 # report test. Tune scratch & pretrained INDEPENDENTLY.
+  epochs: 60
+  weight_decay: 1.0e-2
+  pos_weight: false              # OGB molhiv standard = plain BCE (ROC-AUC is rank-based)
+  # Optional frozen-backbone probe BEFORE finetuning (0 = pure end-to-end). For a
+  # PRETRAINED backbone try --probe-epochs 10-20: the head adapts first so the
+  # finetune lr can't wreck pretrained features in the first steps. Skip for scratch.
+  probe_epochs: 0
+  # probe_lr: 1.0e-3             # defaults to training.lr if unset

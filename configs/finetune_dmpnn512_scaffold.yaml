@@ -1,0 +1,49 @@
+# Finetune config matching pretrain_chembl_dmpnn.yaml (hidden 512 D-MPNN).
+#
+# Use for BOTH sides of the LeJEPA thesis test, identical except --checkpoint:
+#   pretrained: --checkpoint checkpoints/pretrain_chembl_dmpnn/epoch_00XX.pt
+#   scratch   : (no --checkpoint)
+# The delta between them on antibiotic test AUPRC is the result.
+#
+#   uv run python main.py finetune --config configs/finetune_dmpnn512_scaffold.yaml \
+#       --checkpoint checkpoints/pretrain_chembl_dmpnn/epoch_00XX.pt --task antibiotic --seed 42
+#   uv run python main.py finetune --config configs/finetune_dmpnn512_scaffold.yaml \
+#       --task antibiotic --seed 42
+#
+# Arch MUST match the pretrained backbone: dmpnn, use_proj_head true, hidden 512,
+# depth 5, n_descriptors 217. (If you pretrain at hidden 1600 instead, set hidden_dim/
+# embed_dim 1600 here and compare to the existing 0.32 scratch baseline directly.)
+
+project: "antibioticjepa-finetune-dmpnn512"
+wandb: false
+checkpoint_dir: "checkpoints/finetune_dmpnn512"
+
+data:
+  xlsx_path: "data/wang et al/41586_2023_6887_MOESM3_ESM.xlsx"
+  test_size: 0.20
+  val_size: 0.10
+  seed: 42
+  split_method: scaffold
+
+model:
+  backbone: dmpnn
+  use_proj_head: true        # matches the pretrained backbone (proj_head was trained)
+  hidden_dim: 512
+  embed_dim: 512
+  num_layers: 5
+  dropout: 0.0
+  n_descriptors: 217
+  head_hidden_dim: 1600
+  head_num_layers: 3
+
+training:
+  batch_size: 64
+  lr_probe: 1.0e-3
+  probe_epochs: 10
+  lr_finetune: 1.0e-4
+  finetune_epochs: 50
+  scheduler: plateau
+  patience: 5
+  lr_factor: 0.5
+  min_lr: 1.0e-6
+  weight_decay: 1.0e-2

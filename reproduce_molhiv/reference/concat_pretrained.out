@@ -1,0 +1,51 @@
+  [molhiv-train] 32898 compounds, 1232 HIV-active (3.7%)  [skipped 3 unparseable]
+  [molhiv-valid] 4111 compounds, 81 HIV-active (2.0%)  [skipped 2 unparseable]
+  [molhiv-test] 4111 compounds, 130 HIV-active (3.2%)  [skipped 2 unparseable]
+Loaded backbone from checkpoints/pretrain_chembl/final.pt
+  blocks: pooled(128)
+  blocks: pooled(128)
+  blocks: pooled(128)
+
+Balanced concat | RF 1000 trees x 10 seeds
+====================================================================================
+  features                                 dim         test AUC      ens    VALID
+  morgan 512 [mf=sqrt]                     512 0.7974 +/- 0.0034   0.7993   0.8260
+  morgan 512 [mf=0.1]                      512 0.7898 +/- 0.0047   0.7911   0.8206
+  morgan 1024 [mf=sqrt]                   1024 0.8055 +/- 0.0034   0.8073   0.8440
+  morgan 1024 [mf=0.1]                    1024 0.8032 +/- 0.0041   0.8048   0.8453
+  embed PCA-16 alone                        16 0.7861 +/- 0.0028   0.7873   0.7709
+  embed PCA-32 alone                        32 0.7886 +/- 0.0044   0.7905   0.7694
+  embed PCA-64 alone                        64 0.7685 +/- 0.0029   0.7699   0.7697
+  --------------------------------------------------------------------------------
+  morgan 512 + embed PCA-16 [mf=sqrt]      528 0.8195 +/- 0.0043   0.8223   0.8225
+                                               delta vs morgan alone: +0.0220
+  morgan 512 + embed PCA-16 [mf=0.1]       528 0.8163 +/- 0.0026   0.8182   0.8209
+                                               delta vs morgan alone: +0.0264
+  morgan 512 + embed PCA-32 [mf=sqrt]      544 0.8195 +/- 0.0047   0.8222   0.8202
+                                               delta vs morgan alone: +0.0221
+  morgan 512 + embed PCA-32 [mf=0.1]       544 0.8207 +/- 0.0019   0.8230   0.8150
+                                               delta vs morgan alone: +0.0309
+  morgan 512 + embed PCA-64 [mf=sqrt]      576 0.7989 +/- 0.0044   0.8016   0.8054
+                                               delta vs morgan alone: +0.0014
+  morgan 512 + embed PCA-64 [mf=0.1]       576 0.7930 +/- 0.0031   0.7944   0.8008
+                                               delta vs morgan alone: +0.0031
+  morgan 1024 + embed PCA-16 [mf=sqrt]    1040 0.8274 +/- 0.0036   0.8300   0.8454
+                                               delta vs morgan alone: +0.0219
+  morgan 1024 + embed PCA-16 [mf=0.1]     1040 0.8273 +/- 0.0033   0.8294   0.8414
+                                               delta vs morgan alone: +0.0240
+  morgan 1024 + embed PCA-32 [mf=sqrt]    1056 0.8243 +/- 0.0055   0.8271   0.8470
+                                               delta vs morgan alone: +0.0188
+  morgan 1024 + embed PCA-32 [mf=0.1]     1056 0.8298 +/- 0.0043   0.8323   0.8471
+                                               delta vs morgan alone: +0.0266
+  morgan 1024 + embed PCA-64 [mf=sqrt]    1088 0.8059 +/- 0.0044   0.8083   0.8343
+                                               delta vs morgan alone: +0.0004
+  morgan 1024 + embed PCA-64 [mf=0.1]     1088 0.8110 +/- 0.0033   0.8132   0.8313
+                                               delta vs morgan alone: +0.0078
+
+  VALID-SELECTED cell: morgan 1024 + embed PCA-32 [mf=0.1]
+    valid 0.8471  ->  TEST 0.8298 (ens 0.8323)
+    its morgan-alone baseline: test 0.8032 (valid 0.8453)
+    honest delta = +0.0266
+
+  paired bootstrap:  uv run python scripts/paired_bootstrap_auc.py \
+      --ours logs/concat_c1024_32_0.1.npz --other logs/concat_morgan1024_0.1.npz

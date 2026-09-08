@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environments
+.venv/
+.venv-*/
+.idea/
+.vscode/
+
+# Experiment tracking
+wandb/
+
+# Regenerated data (download + featurize locally; see data/README.md)
+data/chembl/
+data/chembl_cache_desc/
+data/ogbg_molhiv/
+data/feature_cache/
+data/molhiv_feature_cache/
+*.tar.gz
+*.smi
+
+# Model weights. The three PRETRAINED BACKBONES are tracked (55 MB, Git LFS) -
+# every result in the paper is reproduced from those. The ~4.2 GB of FINETUNED
+# ensembles (chemprop_*, ens_random_*, scaffold_ms_*, finetune_molhiv_*) are
+# archived separately; see checkpoints/README.md. Their per-compound prediction
+# CSVs ARE tracked, so every significance test in the paper still reruns from
+# this repository alone, without downloading a single model file.
+checkpoints/**/*.pt
+!checkpoints/pretrain_chembl/final.pt
+!checkpoints/pretrain_chembl_nodesc/final.pt
+!checkpoints/pretrain_chembl_dmpnn/final.pt
+
+# TensorBoard scalars from the chemprop baseline runs (7 MB, reproduce nothing)
+events.out.tfevents.*
+
+# Run outputs of reproduce_molhiv/run_all.sh (the reference copies are tracked
+# under reproduce_molhiv/reference/)
+logs/molhiv_reproduce_summary.txt
+logs/concat_*.npz
+
+# Scratch
+*.tmp

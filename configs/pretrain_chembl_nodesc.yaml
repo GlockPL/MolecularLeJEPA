@@ -1,0 +1,77 @@
+# Pretraining config — ChEMBL corpus, DESCRIPTOR-FREE LeJEPA (ablation).
+#
+# Identical to pretrain_chembl.yaml in EVERY respect except n_descriptors: 0 — no
+# RDKit descriptors are concatenated to the global views during pretraining. The
+# point: our molhiv frozen probe extracts the POOLED (pre-projection) embedding,
+# which already excludes descriptors at eval time, so this isolates whether the
+# descriptor CONDITIONING during training helped or hurt the learned pooled graph
+# representation. We pretrained ChEMBL only WITH descriptors (n_descriptors=217);
+# the no-descriptor variant was previously tested only on ZINC. This run answers
+# "does descriptor-free pretraining give a better molhiv pooled rep?" directly.
+#
+# Same cache (data/chembl_cache_desc) — the stored descriptors are simply ignored
+# when n_descriptors: 0. embed_dim stays 128, so the proj_head input is hidden_dim
+# (128) with no descriptor concat.
+#
+# Pretrain (4x GTX1080; bring commit with the --seed/--checkpoint-dir plumbing):
+#   torchrun --nproc_per_node=4 main.py pretrain \
+#       --config configs/pretrain_chembl_nodesc.yaml
+#   # resume: ... --resume auto
+#
+# Frozen-probe eval (same recipe as the paper number; uses configs/finetune_molhiv_nodesc.yaml
+# so load_backbone builds an n_descriptors=0 backbone matching this checkpoint):
+#   uv run python scripts/xgb_molhiv_embed.py \
+#       --config configs/finetune_molhiv_nodesc.yaml \
+#       --checkpoint checkpoints/pretrain_chembl_nodesc/final.pt \
+#       --model rf --embed-mode pooled --n-estimators 1000 --n-models 10
+#   # compare test ROC-AUC vs the descriptor-conditioned 0.788 and random-init 0.665.
+
+project: "antibioticjepa-chembl-nodesc"
+wandb: false
+profile: false
+compile: true
+checkpoint_dir: "checkpoints/pretrain_chembl_nodesc"
+
+data:
+  zinc20_dir: "data/chembl"
+  cache_dir: "data/chembl_cache_desc"
+  cache_in_memory: true        # ~2.9M mols -> ~3 GB; trivially fits RAM
+  max_atoms: 100               # must match --max-atoms used at featurize time
+  max_mols: null
+  shuffle_buffer: 100000
+
+model:
+  hidden_dim: 128
+  embed_dim: 128               # must be <= hidden_dim
+  num_layers: 6
+  num_heads: 4
+  walk_length: 20
+  dropout: 0.1
+  use_checkpoint: true
+  n_descriptors: 0             # ABLATION: descriptor-free pretraining (pure graph)
+
+jepa:
+  lambd: 0.2
+  Vg: 2
+  Vl: 8
+  num_slices: 1024
+  chunk_size: 1
+
+training:
+  # IMPORTANT: the EFFECTIVE batch (batch_size x num_gpus) must be 1024 to match
+  # the with-desc 0.788 baseline AND the steps_per_epoch=2802 budget (cache is
+  # 2,869,674 mols; 2.87M / 1024 = 2802). On the 4x1080 box use 256/GPU (4x256
+  # = 1024). The original pretrain_chembl.yaml's 1024 assumed a SINGLE GPU; at
+  # 1024/GPU x 4 the per-rank shard exhausts at ~700 steps/epoch -> ~28k total
+  # steps (4x undertrained) and the cosine LR (T_max=epochs*steps_per_epoch)
+  # barely anneals. Keep effective batch = 1024.
+  batch_size: 256
+  lr: 3.0e-4
+  weight_decay: 1.0e-2
+  epochs: 40
+  warmup_epochs: 0
+  steps_per_epoch: 2802
+  num_workers: 12
+  prefetch_factor: 4
+  log_every: 100
+  save_every: 2000

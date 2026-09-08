@@ -1,0 +1,57 @@
+=== ogbg-molhiv full run ===
+timestamp   : 20260604_172508
+git commit  : ce2f9841f22e39e527226de26a9a1d519d2eb731  branch pretrain-gtx1080
+git dirty   : yes
+config      : configs/finetune_molhiv.yaml
+checkpoint  : checkpoints/pretrain_chembl/final.pt
+lr grid     : 1e-3 5e-4 1e-4 5e-5
+probe grid  : 0 15 (pretrained only)
+final seeds : 0,1,2,3,4
+sweep dir   : logs/molhiv_sweep_20260604_172508
+master log  : logs/molhiv_full_20260604_172508.log
+============================
+
+########## PHASE A — scratch lr sweep ##########
+  scratch lr=1e-3
+    best val = 0.7856
+  scratch lr=5e-4
+    best val = 0.7902
+  scratch lr=1e-4
+    best val = 0.7691
+  scratch lr=5e-5
+    best val = 0.7645
+  >> best scratch: lr=5e-4 (val 0.7902)
+
+########## PHASE B — pretrained lr x probe sweep ##########
+  pretrained lr=1e-3 probe=0
+    best val = 0.7847
+  pretrained lr=1e-3 probe=15
+    best val = 0.7880
+  pretrained lr=5e-4 probe=0
+    best val = 0.7806
+  pretrained lr=5e-4 probe=15
+    best val = 0.7884
+  pretrained lr=1e-4 probe=0
+    best val = 0.7739
+  pretrained lr=1e-4 probe=15
+    best val = 0.7823
+  pretrained lr=5e-5 probe=0
+    best val = 0.7594
+  pretrained lr=5e-5 probe=15
+    best val = 0.7713
+  >> best pretrained: lr=5e-4 probe=15 (val 0.7884)
+
+########## PHASE C — final 0,1,2,3,4 runs at best-val configs ##########
+  FINAL scratch: lr=5e-4 seeds=0,1,2,3,4
+    scratch TEST ROC-AUC = 0.7170 ± 0.0138
+  FINAL pretrained: lr=5e-4 probe=15 seeds=0,1,2,3,4
+    pretrained TEST ROC-AUC = 0.7220 ± 0.0104
+
+================= ogbg-molhiv RESULT =================
+scratch   : best-val lr=5e-4  ->  TEST ROC-AUC = 0.7170 ± 0.0138
+pretrained: best-val lr=5e-4 probe=15  ->  TEST ROC-AUC = 0.7220 ± 0.0104
+(GNN-SSL band ~0.75-0.79; GIN-scratch ~0.757, Mole-BERT ~0.787)
+Delta (pretrained - scratch) = the LeJEPA-helps signal.
+======================================================
+
+Done. Master log: logs/molhiv_full_20260604_172508.log   Manifest: logs/molhiv_sweep_20260604_172508/MANIFEST.txt

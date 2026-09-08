@@ -1,0 +1,41 @@
+# molhiv config for the DESCRIPTOR-FREE pretrained backbone (frozen-probe eval).
+#
+# Identical to finetune_molhiv.yaml except n_descriptors: 0, so load_backbone
+# builds a backbone whose proj_head matches the checkpoints/pretrain_chembl_nodesc
+# checkpoint (proj_head input = hidden_dim, no descriptor concat). Used only to
+# load the no-descriptor backbone for the frozen probe; embed-mode pooled bypasses
+# the proj_head anyway, so the extracted 128-d pooled embedding is directly
+# comparable to the descriptor-conditioned backbone's pooled embedding.
+#
+#   uv run python scripts/xgb_molhiv_embed.py \
+#       --config configs/finetune_molhiv_nodesc.yaml \
+#       --checkpoint checkpoints/pretrain_chembl_nodesc/final.pt \
+#       --model rf --embed-mode pooled --n-estimators 1000 --n-models 10
+
+project: "antibioticjepa-finetune-molhiv-nodesc"
+wandb: false
+checkpoint_dir: "checkpoints/finetune_molhiv_nodesc"
+
+data:
+  root: "data/ogbg_molhiv"       # auto-downloaded
+  featurizer: ours               # 164-dim atom feats (matches the pretrained backbone)
+
+model:
+  backbone: gps
+  hidden_dim: 128
+  embed_dim: 128
+  num_layers: 6
+  num_heads: 4
+  walk_length: 20
+  dropout: 0.1
+  n_descriptors: 0               # matches the descriptor-free pretrained backbone
+  head_hidden_dim: 256
+  head_num_layers: 1
+
+training:
+  batch_size: 64
+  lr: 1.0e-3
+  epochs: 60
+  weight_decay: 1.0e-2
+  pos_weight: false
+  probe_epochs: 0

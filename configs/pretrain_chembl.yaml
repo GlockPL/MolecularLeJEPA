@@ -1,0 +1,80 @@
+# Pretraining config — ChEMBL corpus, descriptor-augmented LeJEPA.
+#
+# Identical backbone + LeJEPA setup to pretrain_desc.yaml; ONLY the pretraining
+# corpus changes (ZINC20 make-on-demand -> ChEMBL bioactive). Motivation: the
+# scaffold-ceiling check showed ChEMBL covers 58.6% of the antibiotic TEST
+# scaffolds vs ZINC's 21.7% (and from a 55x smaller corpus), so ChEMBL pretraining
+# can represent the antibiotic test chemotypes that ZINC structurally cannot.
+#
+# The backbone arch is byte-for-byte the same (128-dim, 6-layer, n_descriptors=217)
+# so finetune_desc_scaffold.yaml and the task heads load unchanged — the only
+# difference downstream is which checkpoint you point --checkpoint at.
+#
+# Step 0a — get ChEMBL as sharded .smi:
+#   bash scripts/download_chembl.sh
+#
+# Step 0b — build the descriptor-augmented cache (writes chunk_*.pt + desc_stats.pt):
+#   uv run python scripts/featurize_corpus.py \
+#       --input data/chembl --output data/chembl_cache_desc \
+#       --max-atoms 100 --workers 32 --descriptors --global-shuffle
+#   (--max-atoms MUST match data.max_atoms below — the cache is also re-filtered at
+#    load time. 100 keeps 99% of ChEMBL / covers 99.8% of antibiotic test and bounds
+#    worst-case batch memory; ChEMBL has molecules up to 740 atoms, so keep it capped.)
+#   (no --limit -> use all of ChEMBL. NOTE the "Set steps_per_epoch to ~N" line it
+#    prints at the end and copy N into training.steps_per_epoch below — ChEMBL has
+#    larger molecules so max_atoms=60 drops more than ZINC did.)
+#
+# Step 1 — pretrain:
+#   uv run python main.py pretrain --config configs/pretrain_chembl.yaml
+#
+# Resume:
+#   uv run python main.py pretrain --config configs/pretrain_chembl.yaml --resume auto
+
+project: "antibioticjepa-chembl"
+wandb: false
+profile: false
+compile: true
+checkpoint_dir: "checkpoints/pretrain_chembl"
+
+data:
+  zinc20_dir: "data/chembl"
+  cache_dir: "data/chembl_cache_desc"
+  cache_in_memory: true        # ~2.9M mols -> ~3 GB; trivially fits RAM
+  max_atoms: 100               # must match --max-atoms used at featurize time
+  max_mols: null
+  shuffle_buffer: 100000
+
+model:
+  hidden_dim: 128
+  embed_dim: 128               # must be <= hidden_dim
+  num_layers: 6
+  num_heads: 4
+  walk_length: 20
+  dropout: 0.1
+  use_checkpoint: true
+  n_descriptors: 217           # concat normalized RDKit descriptors before proj_head
+                               # GLOBAL VIEWS ONLY — local views get zero descriptor
+
+jepa:
+  lambd: 0.2
+  Vg: 2
+  Vl: 8
+  num_slices: 1024
+  chunk_size: 1
+
+training:
+  batch_size: 1024
+  lr: 3.0e-4
+  weight_decay: 1.0e-2
+  # ChEMBL (~2.5M post-filter) is ~12x smaller than the 30M ZINC cache. To reach a
+  # comparable optimizer-step budget (the ZINC run was healthy by ~29k steps / epoch 1)
+  # we run more epochs over the smaller set. 40 epochs x ~2400 steps ≈ 96k steps.
+  # Watch eff_rank + pred loss in the log and stop when they plateau — LeJEPA's
+  # SIGReg + augmentation make repeated passes safe, but don't overtrain blindly.
+  epochs: 40
+  warmup_epochs: 0
+  steps_per_epoch: 2802
+  num_workers: 12
+  prefetch_factor: 4
+  log_every: 100
+  save_every: 2000

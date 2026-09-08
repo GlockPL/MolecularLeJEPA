@@ -1,0 +1,63 @@
+# Finetuning config for the descriptor-augmented pretrained backbone.
+#
+# Backbone MUST match pretrain_desc.yaml: 128-dim, 6-layer, n_descriptors=217.
+# The backbone incorporates 217 z-score-normalized RDKit descriptors internally
+# (global views only during pretraining); the finetuning loop also concatenates
+# raw descriptors from AntibioticDataset after the backbone forward, giving the
+# task heads a direct descriptor skip-connection on top of the learned embedding.
+# Heads input dim = embed_dim (128) + AntibioticDataset descriptors (217) = 345.
+#
+# Usage:
+#   uv run python main.py finetune \
+#       --config configs/finetune_desc.yaml \
+#       --checkpoint checkpoints/pretrain_desc/final.pt
+#
+# Ensemble:
+#   uv run python scripts/train_ensemble.py \
+#       --config configs/finetune_desc.yaml \
+#       --checkpoint checkpoints/pretrain_desc/final.pt \
+#       --n 10 --out checkpoints/ensemble_desc
+
+project: "antibioticjepa-finetune-desc"
+wandb: false
+checkpoint_dir: "checkpoints/finetune_desc"
+
+data:
+  xlsx_path: "data/wang et al/41586_2023_6887_MOESM3_ESM.xlsx"
+  test_size: 0.20
+  val_size: 0.10
+  seed: 42
+  split_method: scaffold
+
+model:
+  # Must match pretrain_desc.yaml backbone
+  hidden_dim: 128
+  embed_dim: 128
+  num_layers: 6
+  num_heads: 4
+  walk_length: 20
+  dropout: 0.1
+  n_descriptors: 217        # required to load the pretrained proj_head correctly
+  head_hidden_dim: 256
+  head_num_layers: 1        # hidden blocks per task head (input dim 345).
+                            # Capacity sweep (params/head): 1×256≈89k,
+                            # 2×512≈0.44M, 2×1600≈3.1M, 3×1600≈5.7M (≈Chemprop FFN)
+
+training:
+  batch_size: 64
+
+  # Stage 1: linear probe (backbone frozen)
+  lr_probe: 1.0e-3
+  probe_epochs: 10
+
+  # Stage 2: full finetuning
+  lr_finetune: 1.0e-4
+  finetune_epochs: 50
+
+#  scheduler:
+  scheduler: plateau
+  patience: 5
+  lr_factor: 0.5
+  min_lr: 1.0e-6
+
+  weight_decay: 1.0e-2
