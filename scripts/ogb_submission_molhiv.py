@@ -18,14 +18,14 @@ ways the sweep's output is not submission-ready.
 2. THE UNBIASED STANDARD DEVIATION. OGB asks for ``torch.std``, which is ddof=1. The
    sweep uses ``np.std`` (ddof=0). At 10 seeds that is a factor of sqrt(10/9).
 
-3. THE OFFICIAL EVALUATOR. Used when the ``ogb`` package is importable. It is NOT a
-   dependency of this project, and the fallback is exact for THIS dataset: the OGB
-   Evaluator for ogbg-molhiv computes, per task, ``sklearn.roc_auc_score`` over the
-   rows whose label is not NaN, then averages over tasks. ogbg-molhiv has one task and
-   no missing labels, so that reduces to a plain ``roc_auc_score`` over the full split.
-   When ``ogb`` IS installed the script computes both and asserts they agree, so the
-   equivalence is checked rather than claimed. Install it with ``uv add ogb`` if you
-   want the official code path to be the one that produced your submitted number.
+3. THE OFFICIAL EVALUATOR. ``ogb`` is a project dependency, so the reported number
+   comes from ``ogb.graphproppred.Evaluator``. The script also computes
+   ``sklearn.roc_auc_score`` on the same vectors and raises if the two disagree. For
+   ogbg-molhiv they cannot: the Evaluator computes, per task, ``roc_auc_score`` over
+   the rows whose label is not NaN and averages over tasks, and this dataset has one
+   task and no missing labels. That equivalence is what lets the script still run, with
+   a printed warning, where ``ogb`` is not installed - but it is checked on every
+   evaluation rather than assumed.
 
 Reported as the submission: per-model mean +/- unbiased std over seeds 0-9. Do NOT
 submit the ensemble number - averaging the 10 seeds' predictions collapses the 10

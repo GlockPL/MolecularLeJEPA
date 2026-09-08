@@ -225,7 +225,6 @@ submission form asks for.
 
 ```bash
 uv run python scripts/ogb_submission_molhiv.py          # writes logs/ogb_submission_molhiv.json
-uv add ogb                                              # optional, see below
 ```
 
 It differs from the sweep in three ways that matter for a valid submission.
@@ -241,11 +240,12 @@ molecules restored the difference is ~0.
 **It reports the unbiased standard deviation.** OGB asks for `torch.std` (ddof=1);
 the sweep uses `np.std` (ddof=0). Both are printed.
 
-**It uses the official Evaluator when available.** `ogb` is not a dependency of this
-project. For ogbg-molhiv the Evaluator reduces to `roc_auc_score` over the full split
-(one task, no missing labels), so the fallback is exact - and when `ogb` *is*
-installed the script computes both and asserts they agree. Install it if you want the
-official code path to be the one that produced your number.
+**It uses the official Evaluator.** `ogb` is a dependency (`uv sync` installs it), so
+the reported number comes from `ogb.graphproppred.Evaluator`. The script also computes
+`roc_auc_score` on the same vectors and raises if the two disagree; for ogbg-molhiv
+they cannot, since the Evaluator reduces to a plain ROC-AUC over the full split (one
+task, no missing labels). That equivalence is what lets the script still run, with a
+printed warning, in an environment where `ogb` is absent.
 
 Two things to get right on the form: report the **per-model mean over seeds 0-9**, not
 the ensemble (averaging the seeds collapses the ten required runs into one model), and
