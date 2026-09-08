@@ -314,10 +314,14 @@ re-exports them.
 ## Citation
 
 ```bibtex
-@misc{kulczykowski2026lejepa,
-  title  = {Self-Supervised Pretraining of Molecular Graph Encoders with LeJEPA},
-  author = {Kulczykowski, Micha{\l} and {\L}ab{\k{e}}dzki, Rafa{\l}},
-  year   = {2026}
+@misc{kulczykowski2026selfsupervisedpretrainingmoleculargraph,
+      title={Self-Supervised Pretraining of Molecular Graph Encoders with LeJEPA}, 
+      author={Michał Kulczykowski and Rafał Łabędzki},
+      year={2026},
+      eprint={2609.04261},
+      archivePrefix={arXiv},
+      primaryClass={q-bio.QM},
+      url={https://arxiv.org/abs/2609.04261}, 
 }
 ```
 
